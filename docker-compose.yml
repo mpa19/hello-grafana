@@ -1,0 +1,61 @@
+version: '3'
+services:
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_INSTALL_PLUGINS: "grafana-clock-panel,grafana-simple-json-datasource,grafana-worldmap-panel,grafana-piechart-panel"
+    ports:
+      - "3000:3000"
+    volumes:
+      - "grafana:/var/lib/grafana"
+
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "3100:3100"
+    volumes:
+      - "loki:/loki/"
+
+  promtail:
+    image: grafana/promtail:latest
+    volumes:
+      - "/var/log:/var/log"
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - "./prometheus.yml:/etc/prometheus/prometheus.yml"
+
+  sampleapp:
+    image: quay.io/brancz/prometheus-example-app:v0.3.0
+    ports:
+      - "3080:8080"
+    depends_on:
+      - prometheus
+
+  nginx:
+    # garden-variety nginx listening on port 80
+    image: nginx:latest
+    ports:
+      - "80:80"
+    logging:
+      # use official docker logging plugin
+      # install following instructions at 
+      #   https://grafana.com/docs/loki/latest/clients/docker-driver/
+      driver: loki
+      options:
+        # URL must be reacheable by docker so make sure you use the host IP
+        loki-url: http://10.250.0.6:3100/loki/api/v1/push
+        # add job tag
+        # this overrides all tags so container_name must be present as well
+        loki-external-labels: "job=docker,container_name={{.Name}}"
+    # wait for loki service before attempting to write to it
+    depends_on:
+      - loki
+
+volumes:
+  loki:
+  grafana:
